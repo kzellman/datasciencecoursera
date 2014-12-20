@@ -1,0 +1,64 @@
+---
+title: "Predicting Exercise Type Using Accelerometer Data"
+output: html_document
+---
+
+The aim of this project is to predict exercise type using accelerometer data. A random forest model is employed. The model building process and results are discussed below.
+
+```{r, echo=FALSE}
+library(caret)
+library(randomForest)
+trainingraw <- read.csv("pml-training.csv")
+testingraw <- read.csv("pml-testing.csv")
+
+trainingraw[trainingraw==""]  <- NA 
+training2 <- trainingraw[,8:160]
+training3 <- training2[,colSums(is.na(training2))<15000]
+testingraw[testingraw==""]  <- NA 
+testing2 <- testingraw[,8:160]
+testing3 <- testing2[,colSums(is.na(testing2))<19]
+
+head(training3)
+str(training3)
+plot(training3$classe, col=rainbow(5),main="Distribution of Exercise Classe")
+table(training3$classe)
+```
+
+A quick look at the training set shows that there are a number of variables that have several NA/blank values. Blank values are changed to NA after reading in the data. Some of the variables can be removed without losing much explanatory power. First, inconsequential variables are removed. These include the id variable X, along with time_stamps, user_name, new_window, and num_window. Next, we remove columns with mostly or all NA values. This leaves us with 53 variables to train the model on. We then get a sense of the target variable, classe, by plotting it and examining a table of its values.
+
+```{r}
+inTrain <- createDataPartition(y=training3$classe, p = 0.7, list = FALSE)
+training <- training3[inTrain, ]
+testing <- training3[-inTrain, ]
+tc <- trainControl("repeatedcv", number=10, repeats=10, classProbs=TRUE, savePred=T)
+fit <- randomForest(classe ~ ., data=training, prox=T,trControl=tc)
+fit
+```
+
+We then split the data into a training and testing set. A random forest model employing repeated 10-fold cross-validation with 10 repeats is used to build our model. The trainControl function was called separately to make it easy to see how cross-validatoin was used in this case. The model statistics look good and we move on to predict on our testing set and calculate out-of-sample error.
+
+```{r}
+prediction <- predict(fit, testing)
+confusionMatrix(prediction, testing$classe)
+```
+
+We see that our out-of-sample accuracy is .9958, which gives us an out-of-sample error of .0042. Let's predict on the 20 held out cases and write the results to text files.
+
+```{r}
+heldoutpredictions <- predict(fit, testing3)
+heldoutpredictions
+
+answers=c("B", "A", "B", "A", "A", "E", "D", "B", "A", "A", "B", "C", "B", "A", "E", "E", "A", "B", "B", "B")
+
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(answers)
+```
+
+The model performs very well and the 20 predictions are correct. I chose a random forest model for the accuracy, which was paramount in this project. I chose this despite its computationally expensive nature and vulnerabilities to overfitting along with lack of interpretability. I chose repeated cross-validation because I wanted a robust way to check out-of-sample error to get a sense of how well the model generalizes.
